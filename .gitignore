@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Airflow
+airflow/logs/
+airflow/dags/__pycache__/
+airflow/plugins/__pycache__/
+airflow.db
+airflow.cfg
+*.tmp
+
+# PySpark
+spark-warehouse/
+metastore_db/
+derby.log
+logs/
+tmp/
+
+# AWS
+.aws/
+credentials
+config
+
+# Data files
+*.csv
+*.parquet
+*.json
+data/
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Secrets
+secrets.json
+keys/
