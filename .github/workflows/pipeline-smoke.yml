@@ -61,10 +61,8 @@ jobs:
           done
 
       - name: Bootstrap schema
-        env:
-          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
         run: |
-          psql -h localhost -U postgres -d crypto_db -f tests/schema.sql
+          psql "postgresql://postgres:postgres@localhost:5432/crypto_db" -f tests/schema.sql
 
       - name: Run pipeline smoke test
         run: |
