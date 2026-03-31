@@ -67,3 +67,7 @@ jobs:
       - name: Run pipeline smoke test
         run: |
           python tests/test_pipeline_smoke.py
+      
+      - name: Run negative-path test
+        run: |
+            python tests/test_negative_paths.py
