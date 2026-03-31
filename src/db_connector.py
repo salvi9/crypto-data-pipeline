@@ -18,6 +18,10 @@ from contextlib import contextmanager
 
 import psycopg2
 from psycopg2 import pool, sql, Error
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 # ============================================================================
@@ -211,7 +215,11 @@ class DatabaseConnector:
                 volume=1500000
             )
         """
+        savepoint_name = "sp_insert_raw"
         try:
+            # Keep the transaction usable if this insert fails (e.g., duplicate row).
+            self.cursor.execute(f"SAVEPOINT {savepoint_name}")
+
             # SQL query with %s placeholders (not f-strings - prevents SQL injection)
             query = sql.SQL("""
                 INSERT INTO stock_data_raw 
@@ -229,11 +237,19 @@ class DatabaseConnector:
                 close,
                 volume
             ))
+
+            self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
             
             logger.info(f"Inserted raw data: {symbol} at {timestamp}")
             return True
         
         except Error as e:
+            try:
+                self.cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            except Error:
+                self.connection.rollback()
+
             # Check if it's a UNIQUE constraint violation (duplicate)
             if "unique constraint" in str(e).lower():
                 logger.warning(f"Duplicate data (ignored): {symbol} at {timestamp}")
@@ -326,7 +342,11 @@ class DatabaseConnector:
             - 0.8: Minor issues but usable
             - 0.5: Questionable, use with caution
         """
+        savepoint_name = "sp_insert_clean"
         try:
+            # Keep the transaction usable if this insert fails.
+            self.cursor.execute(f"SAVEPOINT {savepoint_name}")
+
             query = sql.SQL("""
                 INSERT INTO stock_data_clean 
                 (symbol, timestamp, "open", high, low, "close", volume, 
@@ -345,11 +365,19 @@ class DatabaseConnector:
                 data_quality_score,
                 is_valid
             ))
+
+            self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
             
             logger.info(f"Inserted clean data: {symbol} (quality: {data_quality_score})")
             return True
         
         except Error as e:
+            try:
+                self.cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            except Error:
+                self.connection.rollback()
+
             if "unique constraint" in str(e).lower():
                 logger.warning(f"Duplicate clean data: {symbol} at {timestamp}")
                 return False
@@ -442,7 +470,11 @@ class DatabaseConnector:
         Note:
             Optional fields can be None (fills database NULL values)
         """
+        savepoint_name = "sp_insert_hourly"
         try:
+            # Keep the transaction usable if this insert fails.
+            self.cursor.execute(f"SAVEPOINT {savepoint_name}")
+
             query = sql.SQL("""
                 INSERT INTO stock_metrics_hourly 
                 (symbol, period_start, period_end, hour_open, hour_high, 
@@ -458,11 +490,19 @@ class DatabaseConnector:
                 moving_avg_15, volatility, price_change, price_change_pct,
                 is_high_volatility, is_high_volume
             ))
+
+            self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
             
             logger.info(f"Inserted hourly metrics: {symbol} ({period_start})")
             return True
         
         except Error as e:
+            try:
+                self.cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            except Error:
+                self.connection.rollback()
+
             if "unique constraint" in str(e).lower():
                 logger.warning(f"Duplicate hourly metrics: {symbol} at {period_start}")
                 return False
@@ -478,16 +518,21 @@ class DatabaseConnector:
         
         Returns:
             List[Dict]: Cleaned records ready for metric calculation
+
+        Logic:
+            - Uses symbol + hour bucket matching to determine whether data
+              has already been aggregated into stock_metrics_hourly
+            - Avoids comparing unrelated surrogate IDs across different tables
         """
         try:
             query = sql.SQL("""
                 SELECT c.id, c.symbol, c.timestamp, c."open", c.high,
                        c.low, c."close", c.volume
                 FROM stock_data_clean c
-                WHERE c.id NOT IN (
-                    SELECT DISTINCT h.id 
-                    FROM stock_metrics_hourly h
-                )
+                LEFT JOIN stock_metrics_hourly h
+                    ON c.symbol = h.symbol
+                   AND DATE_TRUNC('hour', c.timestamp) = h.period_start
+                WHERE h.id IS NULL
                 ORDER BY c.timestamp ASC
                 LIMIT %s
             """)
@@ -540,7 +585,11 @@ class DatabaseConnector:
         Returns:
             bool: True if successful
         """
+        savepoint_name = "sp_insert_daily"
         try:
+            # Keep the transaction usable if this insert fails.
+            self.cursor.execute(f"SAVEPOINT {savepoint_name}")
+
             query = sql.SQL("""
                 INSERT INTO stock_data_daily
                 (symbol, trading_date, day_open, day_high, day_low, day_close,
@@ -554,11 +603,19 @@ class DatabaseConnector:
                 day_volume, daily_change, daily_return_pct, upside, downside,
                 intraday_range
             ))
+
+            self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
             
             logger.info(f"Inserted daily aggregate: {symbol} on {trading_date}")
             return True
         
         except Error as e:
+            try:
+                self.cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                self.cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            except Error:
+                self.connection.rollback()
+
             if "unique constraint" in str(e).lower():
                 logger.warning(f"Daily aggregate already exists: {symbol} on {trading_date}")
                 return False
