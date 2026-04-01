@@ -9,6 +9,7 @@ if PROJECT_ROOT not in sys.path:
 	sys.path.insert(0, PROJECT_ROOT)
 
 from src.db_connector import DatabaseConnector
+from src.fetch_market_data import fetch_daily
 
 
 def snapshot_stats(db: DatabaseConnector) -> Dict[str, int]:
@@ -30,56 +31,20 @@ def print_stats_delta(before: Dict[str, int], after: Dict[str, int]) -> None:
 		print(f"{key}: {b} -> {a} (delta: {d:+d})")
 
 
-def get_sample_bronze_records() -> List[Dict]:
-	"""Return a small sample batch with one intentional duplicate."""
-	base = datetime.now().replace(microsecond=0, second=0)
-	t0 = base.strftime("%Y-%m-%d %H:%M:%S")
-	t1 = (base + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
-	t2 = (base + timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
+SYMBOLS = ["AAPL", "MSFT", "NVDA"]
 
-	return [
-		{
-			"symbol": "AAPL",
-			"timestamp": t0,
-			"open_price": 182.10,
-			"high": 183.25,
-			"low": 181.80,
-			"close": 182.95,
-			"volume": 1200000,
-		},
-		{
-			"symbol": "MSFT",
-			"timestamp": t1,
-			"open_price": 421.00,
-			"high": 422.40,
-			"low": 420.10,
-			"close": 421.75,
-			"volume": 980000,
-		},
-		{
-			"symbol": "NVDA",
-			"timestamp": t2,
-			"open_price": 903.50,
-			"high": 910.20,
-			"low": 901.75,
-			"close": 908.40,
-			"volume": 1500000,
-		},
-		{
-			"symbol": "AAPL",
-			"timestamp": t0,
-			"open_price": 182.10,
-			"high": 183.25,
-			"low": 181.80,
-			"close": 182.95,
-			"volume": 1200000,
-		},
-	]
+
+def get_bronze_records() -> List[Dict]:
+	"""Fetch live intraday records from Alpha Vantage for all symbols."""
+	records = []
+	for symbol in SYMBOLS:
+		records.extend(fetch_daily(symbol))
+	return records
 
 
 def ingest_bronze_sample(db: DatabaseConnector) -> Dict[str, int]:
-	"""Insert sample rows into Bronze and return counts."""
-	records = get_sample_bronze_records()
+	"""Insert live API rows into Bronze and return counts."""
+	records = get_bronze_records()
 
 	inserted = 0
 	failed = 0
