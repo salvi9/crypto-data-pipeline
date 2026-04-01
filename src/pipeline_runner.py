@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Dict, List
+import argparse
 import os
 import sys
 
@@ -34,17 +35,57 @@ def print_stats_delta(before: Dict[str, int], after: Dict[str, int]) -> None:
 SYMBOLS = ["AAPL", "MSFT", "NVDA"]
 
 
-def get_bronze_records() -> List[Dict]:
-	"""Fetch live intraday records from Alpha Vantage for all symbols."""
-	records = []
+def get_latest_bronze_timestamps(db: DatabaseConnector) -> Dict[str, datetime]:
+	"""Return the latest Bronze timestamp currently stored for each symbol."""
+	latest = {}
 	for symbol in SYMBOLS:
-		records.extend(fetch_daily(symbol))
+		rows = db.query_raw_data(symbol=symbol, limit=1)
+		if not rows:
+			continue
+		ts = rows[0]["timestamp"]
+		if not isinstance(ts, datetime):
+			ts = datetime.fromisoformat(str(ts))
+		latest[symbol] = ts
+	return latest
+
+
+def get_bronze_records(db: DatabaseConnector, max_records_per_symbol: int = 10) -> List[Dict]:
+	"""Fetch only recent records that are newer than current Bronze data."""
+	records = []
+	latest_by_symbol = get_latest_bronze_timestamps(db)
+	rate_limited_symbols = []
+	missing_key = False
+
+	for symbol in SYMBOLS:
+		fetched_rows, status = fetch_daily(symbol)
+		if status == "rate_limited":
+			rate_limited_symbols.append(symbol)
+		if status == "missing_api_key":
+			missing_key = True
+		if not fetched_rows:
+			continue
+
+		new_rows = []
+		latest_ts = latest_by_symbol.get(symbol)
+		for row in fetched_rows:
+			row_ts = datetime.fromisoformat(str(row["timestamp"]))
+			if latest_ts is None or row_ts > latest_ts:
+				new_rows.append(row)
+
+		records.extend(new_rows[:max_records_per_symbol])
+
+	if missing_key:
+		print("Alpha Vantage key missing. Check ALPHAVANTAGE_API_KEY in .env")
+	elif rate_limited_symbols:
+		symbol_list = ", ".join(rate_limited_symbols)
+		print(f"Alpha Vantage rate limit reached for: {symbol_list}")
+
 	return records
 
 
 def ingest_bronze_sample(db: DatabaseConnector) -> Dict[str, int]:
 	"""Insert live API rows into Bronze and return counts."""
-	records = get_bronze_records()
+	records = get_bronze_records(db)
 
 	inserted = 0
 	failed = 0
@@ -311,5 +352,34 @@ def run_pipeline() -> None:
 	print(f"Duration: {end - start}")
 
 
+def run_stage(stage: str) -> None:
+	"""Run a single pipeline stage for Airflow task-level visibility."""
+	print(f"Running stage: {stage}")
+	with DatabaseConnector() as db:
+		if stage == "bronze":
+			summary = ingest_bronze_sample(db)
+			print(f"Bronze run summary: {summary}")
+		elif stage == "silver":
+			summary = clean_bronze_to_silver(db, limit=100)
+			print(f"Silver run summary: {summary}")
+		elif stage == "gold":
+			summary = aggregate_silver_to_gold(db, limit=1000)
+			print(f"Gold run summary: {summary}")
+		else:
+			raise ValueError(f"Unknown stage: {stage}")
+
+
 if __name__ == "__main__":
-	run_pipeline()
+	parser = argparse.ArgumentParser(description="Run the crypto data pipeline")
+	parser.add_argument(
+		"--stage",
+		choices=["all", "bronze", "silver", "gold"],
+		default="all",
+		help="Run full pipeline or a single stage",
+	)
+	args = parser.parse_args()
+
+	if args.stage == "all":
+		run_pipeline()
+	else:
+		run_stage(args.stage)

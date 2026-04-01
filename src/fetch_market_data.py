@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from dotenv import load_dotenv
 
@@ -9,13 +9,12 @@ load_dotenv()
 API_URL = "https://www.alphavantage.co/query"
 
 
-def fetch_daily(symbol: str) -> List[Dict]:
-    """Fetch daily OHLCV records for a symbol from Alpha Vantage."""
+def fetch_daily(symbol: str) -> Tuple[List[Dict], str]:
+    """Fetch daily OHLCV records and return (records, status)."""
     api_key = os.getenv("ALPHAVANTAGE_API_KEY")
 
     if not api_key:
-        print("ALPHAVANTAGE_API_KEY not set in .env")
-        return []
+        return [], "missing_api_key"
 
     params = {
         "function": "TIME_SERIES_DAILY",
@@ -29,18 +28,15 @@ def fetch_daily(symbol: str) -> List[Dict]:
     data = response.json()
 
     if "Error Message" in data:
-        print(f"API error for {symbol}: {data['Error Message']}")
-        return []
+        return [], "api_error"
 
     if "Information" in data:
-        print(f"API rate limit hit: {data['Information']}")
-        return []
+        return [], "rate_limited"
 
     time_series_key = "Time Series (Daily)"
 
     if time_series_key not in data:
-        print(f"No data for {symbol}. Response keys: {list(data.keys())}")
-        return []
+        return [], "no_data"
 
     records = []
     for date_str, ohlcv in data[time_series_key].items():
@@ -55,10 +51,11 @@ def fetch_daily(symbol: str) -> List[Dict]:
         })
 
     print(f"Fetched {len(records)} records for {symbol}")
-    return records
+    return records, "ok"
 
 
 if __name__ == "__main__":
-    results = fetch_daily("AAPL")
+    results, status = fetch_daily("AAPL")
+    print(f"status={status}")
     for row in results[:3]:
         print(row)

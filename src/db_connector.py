@@ -249,7 +249,7 @@ class DatabaseConnector:
 
             # Check if it's a UNIQUE constraint violation (duplicate)
             if "unique constraint" in str(e).lower():
-                logger.warning(f"Duplicate data (ignored): {symbol} at {timestamp}")
+                logger.debug(f"Duplicate data (ignored): {symbol} at {timestamp}")
                 return False
             else:
                 logger.error(f"Error inserting raw data: {e}")
@@ -376,7 +376,7 @@ class DatabaseConnector:
                 self.connection.rollback()
 
             if "unique constraint" in str(e).lower():
-                logger.warning(f"Duplicate clean data: {symbol} at {timestamp}")
+                logger.debug(f"Duplicate clean data: {symbol} at {timestamp}")
                 return False
             logger.error(f"Error inserting clean data: {e}")
             return False
@@ -501,7 +501,7 @@ class DatabaseConnector:
                 self.connection.rollback()
 
             if "unique constraint" in str(e).lower():
-                logger.warning(f"Duplicate hourly metrics: {symbol} at {period_start}")
+                logger.debug(f"Duplicate hourly metrics: {symbol} at {period_start}")
                 return False
             logger.error(f"Error inserting hourly metrics: {e}")
             return False
@@ -614,7 +614,7 @@ class DatabaseConnector:
                 self.connection.rollback()
 
             if "unique constraint" in str(e).lower():
-                logger.warning(f"Daily aggregate already exists: {symbol} on {trading_date}")
+                logger.debug(f"Daily aggregate already exists: {symbol} on {trading_date}")
                 return False
             logger.error(f"Error inserting daily aggregate: {e}")
             return False
