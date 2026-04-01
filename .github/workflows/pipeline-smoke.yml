@@ -77,7 +77,22 @@ jobs:
 
       - name: Run DAG import test
         run: |
-          pytest -q tests/test_dag_import.py
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          dag_file = Path("dags/crypto_pipeline_dag.py")
+          spec = importlib.util.spec_from_file_location("crypto_pipeline_dag", dag_file)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          dag = getattr(module, "dag", None)
+          assert dag is not None
+          assert dag.dag_id == "crypto_data_pipeline"
+          expected = {"bronze_ingest", "silver_clean", "gold_aggregate"}
+          assert expected.issubset(set(dag.task_dict.keys()))
+          print("DAG import test passed")
+          PY
       
       - name: Run negative-path test
         run: |
