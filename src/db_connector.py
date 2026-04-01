@@ -7,17 +7,16 @@ Purpose:
     and provides reusable methods for inserting, querying, and updating data.
 
 Design Pattern:
-    Singleton with Context Manager - ensures only one connection pool exists
-    and automatically closes connections when done.
+    Context Manager - automatically opens and closes connections
+    when entering/exiting a with block.
 """
 
 import os
 import logging
-from typing import List, Dict, Tuple, Optional
-from contextlib import contextmanager
+from typing import List, Dict, Optional
 
 import psycopg2
-from psycopg2 import pool, sql, Error
+from psycopg2 import sql, Error
 from dotenv import load_dotenv
 
 
@@ -65,7 +64,7 @@ class DatabaseConnector:
     Manages PostgreSQL database connections and operations.
     
     Features:
-        - Connection pooling (reuses connections instead of creating new ones)
+        - Clear connection lifecycle via context manager
         - Automatic connection cleanup
         - Transaction management
         - Parameterized queries (prevents SQL injection)
@@ -78,14 +77,12 @@ class DatabaseConnector:
             results = db.query_raw_data(symbol='IBM')
     """
     
-    _instance = None  # Singleton pattern: only one instance
-    
     def __init__(self):
         """
         Initialize the database connector.
         
         Loads credentials from environment variables (.env file)
-        and creates a connection pool for efficient resource usage.
+        and prepares connection/cursor attributes.
         """
         # Load PostgreSQL credentials from environment variables
         self.host = os.getenv("POSTGRES_HOST", "localhost")

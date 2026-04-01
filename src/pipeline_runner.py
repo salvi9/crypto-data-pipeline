@@ -12,12 +12,12 @@ from src.db_connector import DatabaseConnector
 
 
 def snapshot_stats(db: DatabaseConnector) -> Dict[str, int]:
-	"""Read medallion-layer row counts from the database."""
+	"""Return current row counts for all layers."""
 	return db.get_pipeline_stats()
 
 
 def print_stats_delta(before: Dict[str, int], after: Dict[str, int]) -> None:
-	"""Print before/after counts and the per-layer delta."""
+	"""Print before/after counts and deltas."""
 	print("\n=== PIPELINE STATS ===")
 	print(f"Before: {before}")
 	print(f"After:  {after}")
@@ -31,12 +31,7 @@ def print_stats_delta(before: Dict[str, int], after: Dict[str, int]) -> None:
 
 
 def get_sample_bronze_records() -> List[Dict]:
-	"""
-	Return a small batch of raw records for Bronze ingestion.
-
-	One record is intentionally duplicated so we can verify that
-	duplicate handling does not break the pipeline run.
-	"""
+	"""Return a small sample batch with one intentional duplicate."""
 	base = datetime.now().replace(microsecond=0, second=0)
 	t0 = base.strftime("%Y-%m-%d %H:%M:%S")
 	t1 = (base + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
@@ -83,11 +78,7 @@ def get_sample_bronze_records() -> List[Dict]:
 
 
 def ingest_bronze_sample(db: DatabaseConnector) -> Dict[str, int]:
-	"""
-	Insert a small sample batch into the Bronze layer.
-
-	Returns a summary dictionary with inserted and failed counts.
-	"""
+	"""Insert sample rows into Bronze and return counts."""
 	records = get_sample_bronze_records()
 
 	inserted = 0
@@ -124,16 +115,7 @@ def ingest_bronze_sample(db: DatabaseConnector) -> Dict[str, int]:
 
 
 def assess_quality(record: Dict) -> Dict[str, object]:
-	"""
-	Apply simple quality checks to a raw Bronze record.
-
-	Returns:
-		{
-			"is_valid": bool,
-			"score": float,
-			"issues": List[str]
-		}
-	"""
+	"""Apply basic data-quality checks to one row."""
 	issues = []
 
 	open_price = float(record["open"])
@@ -162,12 +144,7 @@ def assess_quality(record: Dict) -> Dict[str, object]:
 
 
 def clean_bronze_to_silver(db: DatabaseConnector, limit: int = 100) -> Dict[str, int]:
-	"""
-	Move unprocessed Bronze rows into Silver with basic quality scoring.
-
-	Rows are fetched via get_raw_data_for_cleaning, validated, and inserted
-	into stock_data_clean.
-	"""
+	"""Move unprocessed Bronze rows into Silver with quality scoring."""
 	raw_rows = db.get_raw_data_for_cleaning(limit=limit)
 
 	processed = 0
@@ -214,20 +191,8 @@ def clean_bronze_to_silver(db: DatabaseConnector, limit: int = 100) -> Dict[str,
 	return summary
 
 
-def _to_datetime(value) -> datetime:
-	"""Normalize DB timestamp values into Python datetime objects."""
-	if isinstance(value, datetime):
-		return value
-	return datetime.fromisoformat(str(value))
-
-
 def aggregate_silver_to_gold(db: DatabaseConnector, limit: int = 1000) -> Dict[str, int]:
-	"""
-	Aggregate cleaned Silver rows into Gold hourly and daily tables.
-
-	Hourly grouping key: (symbol, hour bucket)
-	Daily grouping key: (symbol, trading date)
-	"""
+	"""Aggregate Silver rows into Gold hourly and daily tables."""
 	rows = db.get_cleaned_data_for_metrics(limit=limit)
 
 	print("\n=== GOLD AGGREGATION ===")
@@ -247,7 +212,9 @@ def aggregate_silver_to_gold(db: DatabaseConnector, limit: int = 1000) -> Dict[s
 	# Build hourly groups.
 	hourly_groups = {}
 	for row in rows:
-		ts = _to_datetime(row["timestamp"])
+		ts = row["timestamp"]
+		if not isinstance(ts, datetime):
+			ts = datetime.fromisoformat(str(ts))
 		hour_start = ts.replace(minute=0, second=0, microsecond=0)
 		key = (row["symbol"], hour_start)
 		hourly_groups.setdefault(key, []).append({**row, "_ts": ts})
@@ -298,7 +265,9 @@ def aggregate_silver_to_gold(db: DatabaseConnector, limit: int = 1000) -> Dict[s
 	# Build daily groups from same input rows.
 	daily_groups = {}
 	for row in rows:
-		ts = _to_datetime(row["timestamp"])
+		ts = row["timestamp"]
+		if not isinstance(ts, datetime):
+			ts = datetime.fromisoformat(str(ts))
 		trading_date = ts.date()
 		key = (row["symbol"], trading_date)
 		daily_groups.setdefault(key, []).append({**row, "_ts": ts})
@@ -354,16 +323,7 @@ def aggregate_silver_to_gold(db: DatabaseConnector, limit: int = 1000) -> Dict[s
 
 
 def run_pipeline() -> None:
-	"""
-	Pipeline entrypoint scaffold.
-
-	Current behavior:
-	1. Connects to PostgreSQL.
-	2. Captures stats before and after the run.
-	3. Prints run duration and layer deltas.
-
-	Next steps will plug Bronze, Silver, and Gold processing into this function.
-	"""
+	"""Run Bronze, Silver, and Gold steps and print summary stats."""
 	start = datetime.now()
 	print(f"Pipeline started at {start.isoformat(timespec='seconds')}")
 
