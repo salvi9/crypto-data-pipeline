@@ -66,3 +66,6 @@ data/
 # Secrets
 secrets.json
 keys/
+
+# Private notes (not for repo)
+MASTER_NOTES.md

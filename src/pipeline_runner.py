@@ -11,6 +11,7 @@ if PROJECT_ROOT not in sys.path:
 
 from src.db_connector import DatabaseConnector
 from src.fetch_market_data import fetch_daily
+from src.s3_archive import upload_bronze_snapshot
 
 
 def snapshot_stats(db: DatabaseConnector) -> Dict[str, int]:
@@ -64,6 +65,12 @@ def get_bronze_records(db: DatabaseConnector, max_records_per_symbol: int = 10) 
 			missing_key = True
 		if not fetched_rows:
 			continue
+
+		uploaded, detail = upload_bronze_snapshot(symbol, fetched_rows)
+		if uploaded:
+			print(f"S3 archive uploaded for {symbol}: {detail}")
+		else:
+			print(f"S3 archive skipped for {symbol}: {detail}")
 
 		new_rows = []
 		latest_ts = latest_by_symbol.get(symbol)

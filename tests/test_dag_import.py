@@ -1,3 +1,11 @@
+"""
+DAG import test.
+
+NOTE: This test requires Airflow 2.7.3.  If you have a different version of
+Airflow in your local venv it will fail locally.  It is validated correctly
+in CI (GitHub Actions) which installs Airflow 2.7.3 via constraints.
+Run via CI or install: pip install "apache-airflow==2.7.3".
+"""
 import importlib.util
 from pathlib import Path
 
