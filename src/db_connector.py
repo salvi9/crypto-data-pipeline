@@ -214,17 +214,17 @@ class DatabaseConnector:
         """
         savepoint_name = "sp_insert_raw"
         try:
-            # Keep the transaction usable if this insert fails (e.g., duplicate row).
+            # Keep the transaction usable if this insert fails.
             self.cursor.execute(f"SAVEPOINT {savepoint_name}")
 
-            # SQL query with %s placeholders (not f-strings - prevents SQL injection)
+            # SQL query with %s placeholders
             query = sql.SQL("""
                 INSERT INTO stock_data_raw 
                 (symbol, timestamp, "open", high, low, "close", volume)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """)
             
-            # Execute with parameters (safely escaped by psycopg2)
+            # Execute with parameters 
             self.cursor.execute(query, (
                 symbol,
                 timestamp,
@@ -247,7 +247,7 @@ class DatabaseConnector:
             except Error:
                 self.connection.rollback()
 
-            # Check if it's a UNIQUE constraint violation (duplicate)
+            # Check for duplicate
             if "unique constraint" in str(e).lower():
                 logger.debug(f"Duplicate data (ignored): {symbol} at {timestamp}")
                 return False
@@ -269,11 +269,6 @@ class DatabaseConnector:
         
         Returns:
             List[Dict]: List of dictionaries, one per row
-        
-        Example:
-            records = db.query_raw_data(symbol='IBM', limit=10)
-            for record in records:
-                print(f"{record['symbol']}: {record['close']}")
         """
         try:
             query = sql.SQL("""
